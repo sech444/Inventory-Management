@@ -1,0 +1,130 @@
+name: Build Windows Executable
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:  # Allows manual trigger
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        pip install tkinter
+        pip install sqlite3
+        pip install datetime
+        pip install json
+        pip install os
+        pip install hashlib
+        pip install re
+        pip install webbrowser
+        pip install tempfile
+        
+    - name: Build Windows executable
+      run: |
+        pyinstaller --onefile --windowed --name="InventoryManager" --icon=icon.ico inventory_ui.py
+        
+    - name: Upload Windows executable
+      uses: actions/upload-artifact@v4
+      with:
+        name: InventoryManager-Windows
+        path: dist/InventoryManager.exe
+        
+  build-linux:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        sudo apt-get install python3-tk
+        
+    - name: Build Linux executable
+      run: |
+        pyinstaller --onefile --windowed --name="InventoryManager" inventory_ui.py
+        
+    - name: Upload Linux executable
+      uses: actions/upload-artifact@v4
+      with:
+        name: InventoryManager-Linux
+        path: dist/InventoryManager
+
+  create-release:
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    
+    steps:
+    - name: Download Windows artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: InventoryManager-Windows
+        path: ./windows/
+        
+    - name: Download Linux artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: InventoryManager-Linux  
+        path: ./linux/
+        
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ github.run_number }}
+        release_name: Release v${{ github.run_number }}
+        draft: false
+        prerelease: false
+        body: |
+          Automated build of Inventory Management System
+          
+          ## Downloads:
+          - **Windows**: InventoryManager.exe
+          - **Linux**: InventoryManager
+          
+          ## Installation:
+          **Windows**: Download and run InventoryManager.exe
+          **Linux**: Download, make executable with `chmod +x InventoryManager`, then run `./InventoryManager`
+          
+    - name: Upload Windows Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./windows/InventoryManager.exe
+        asset_name: InventoryManager-Windows.exe
+        asset_content_type: application/octet-stream
+        
+    - name: Upload Linux Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./linux/InventoryManager
+        asset_name: InventoryManager-Linux
+        asset_content_type: application/octet-stream
